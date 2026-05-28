@@ -1,0 +1,52 @@
+name: content-factory
+description: Turns a topic into a polished, evidence-backed blog post
+topology: supervisor-workers
+budget:
+  max_tokens: 100000
+  max_hops: 20
+
+roles:
+  - name: researcher
+    responsibility: |
+      Research the given topic. Use WebSearch and WebFetch to find 5–10 credible,
+      recent (prefer last 2 years) sources. For each source, capture:
+        - Title + URL
+        - One-sentence summary of what it claims
+        - 2–4 key facts, quotes, or data points worth using
+        - Any caveats, counterarguments, or contradictions across sources
+      Output a structured research brief (~400–600 words) with inline source URLs.
+      Skip filler. Do not write the article itself — that's the writer's job.
+    subagent_type: researcher
+    tools: [WebSearch, WebFetch]
+    model: sonnet
+
+  - name: writer
+    responsibility: |
+      Take the researcher's brief and write a 600–900 word blog post on the topic.
+      Audience: technical readers who want substance, not fluff.
+      Tone: clear, opinionated, evidence-based — not corporate, not breathless.
+      Structure: hook → context → 2–3 substantive sections → takeaway.
+      Use the research brief's facts and sources. Cite inline as [Source: <URL>].
+      Do NOT invent statistics, quotes, or claims not in the brief. If something
+      needs a citation that's missing, flag it as [CITATION NEEDED].
+      Return ONLY the post body in markdown. No "Here is the post:" preamble.
+    subagent_type: general-purpose
+    tools: []
+    model: sonnet
+
+  - name: editor
+    responsibility: |
+      You receive (a) the researcher's brief and (b) the writer's draft.
+      Your job is to ship a final polished version:
+        1. Fact-check every concrete claim in the draft against the brief.
+           If a claim isn't supported, either fix it or replace with [CITATION NEEDED].
+        2. Tighten prose: cut filler, kill hedging, sharpen verbs.
+        3. Verify the structure flows: hook → context → sections → takeaway.
+        4. Make sure all source URLs from inline citations are real (from the brief).
+        5. Add a 1-line TL;DR at the top.
+      Return ONLY the final post in markdown, starting with the TL;DR.
+      If the draft has unfixable problems (e.g., majority of claims unsupported),
+      return a short note explaining what's wrong instead of polishing garbage.
+    subagent_type: reviewer
+    tools: []
+    model: sonnet

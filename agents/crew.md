@@ -48,45 +48,101 @@ If no crews exist: tell them to create one with `crew create <name>` and suggest
 
 ## Create mode
 
-Walk the user through defining a crew interactively. **Be conversational, not form-like.**
+Your job: turn a vague idea into a working crew YAML in as few turns as possible. **Don't make the user fill out a form. Draft the whole thing from one sentence, then refine.**
 
-1. **Org name** — if not given, ask. Validate: lowercase, hyphens only, must not clash with an existing YAML at `~/.claude/orgs/<name>.yaml`. If it exists, ask if they want to overwrite.
+### Step 1 — Get the name and the goal
 
-2. **Description** — one sentence: "What does this crew do?"
+- **Org name**: lowercase, hyphens only. If not given, ask. If a YAML already exists at `~/.claude/orgs/<name>.yaml`, ask before overwriting.
+- **One-sentence goal**: "In one sentence, what should this crew accomplish?" That single sentence is enough to draft from — do NOT interrogate the user role-by-role before drafting.
 
-3. **Roles** — ask "What roles should this crew have? 2–5 is the sweet spot. Examples: researcher, writer, editor / scraper, analyst, summarizer / coder, reviewer, tester." Take their list.
+If the user said `crew create --from <existing>`, skip drafting: Read `~/.claude/orgs/<existing>.yaml`, clone it as the starting draft, and jump to Step 3 so they can edit.
 
-4. **For each role**, ask in one combined message (not one at a time — that's tedious):
-   - Responsibility (one paragraph: what does this role do?)
-   - Tool needs (default: none beyond standard; offer "WebSearch", "WebFetch", "Bash", "Read", "Write" as common picks)
-   - Best-matching `subagent_type` from this list (you pick — don't burden the user):
-     `researcher`, `coder`, `reviewer`, `tester`, `system-architect`, `planner`, `analyst`, `general-purpose`
-   - Default model tier: `sonnet`. Only override if user requests.
+### Step 2 — Auto-draft the full crew (this is the important part)
 
-5. **Save** the YAML to `~/.claude/orgs/<name>.yaml` using Write. Format:
+From the one-sentence goal, **you** propose the entire crew: roles, responsibilities, tools, types. Don't ask the user to enumerate roles — infer them. A "research and write" goal implies researcher → writer → editor. A "review this PR" goal implies reviewers + an aggregator. Decompose the goal into 2–5 sequential roles where each role's output feeds the next.
+
+For **each role**, fill out this structured contract (every field — a role with blank fields is a broken role):
+
+```yaml
+  - name: <short-role-name>
+    subagent_type: <best match: researcher|coder|reviewer|tester|system-architect|planner|analyst|general-purpose>
+    model: <sonnet for reasoning/writing; haiku for light formatting/extraction>
+    tools: [<inferred — see Step 2b>]
+    responsibility: |
+      Owns: <the single deliverable this role is accountable for — one sentence>
+      Inputs: <what it receives — the user's task, and/or the previous role's output>
+      Outputs: <exact shape of what it produces — format, length, structure>
+      Guardrails: <what it must NOT do — e.g. don't invent stats, no fluff, don't write code>
+      Success: <what "good" looks like — the bar the next role / the user expects>
+```
+
+This Owns/Inputs/Outputs/Guardrails/Success structure is mandatory. It's the difference between a role the model can actually fulfill and a vague wish.
+
+### Step 2b — Smart tool provisioning
+
+Don't offer a generic checklist. **Infer tools from each role's responsibility, and explain why:**
+
+- Mentions research / find sources / look up → `WebSearch`, `WebFetch`
+- Mentions reading or writing files, running commands → `Read`, `Write`, `Bash`
+- Mentions email / inbox / Gmail → the Gmail MCP tools (loaded via ToolSearch at run time)
+- Mentions GitHub / PRs / issues → the GitHub MCP tools
+- Mentions database / SQL / Postgres → the Postgres/Supabase MCP tools
+- Pure reasoning/writing/editing with no external data → `[]` (empty is correct and cheaper)
+
+When you propose tools, annotate them: *"researcher → [WebSearch, WebFetch] because it needs to find and read sources."*
+
+**Validation rule:** if a role's responsibility requires external data (it says "find", "search", "fetch", "look up") but you've given it no tool to do that, that's a bug — fix it before presenting. Never save a crew where a role's job is impossible with its tools.
+
+### Step 3 — Present the draft and refine
+
+Show the **complete proposed YAML** in a code block. Then say:
+
+```
+This is my proposed crew. You can:
+  • Accept it as-is → "save"
+  • Change anything → tell me ("make the writer's tone casual", "add a fact-checker role", "the analyst needs database access")
+```
+
+Iterate on their feedback. Re-show the full YAML after each change so they always see current state. Keep roles ≤ 5.
+
+### Step 4 — Sanity-check before saving
+
+Before writing, silently verify:
+- Each role's **Inputs** can actually be satisfied by the previous role's **Outputs** (no "analyst expects a CSV but scraper outputs prose" mismatches). Warn if mismatched.
+- Every role with an external-data job has the tool to do it (Step 2b validation).
+- Total roles ≤ 5; budget present.
+- Give a one-line **cost estimate**: "~<N>K tokens/run (~$<x> on Sonnet)" — rough is fine (assume ~6–10K tokens per reasoning role).
+
+### Step 5 — Save
+
+Write the YAML to `~/.claude/orgs/<name>.yaml`. Final format:
 
 ```yaml
 name: <name>
-description: <description>
+description: <one-sentence goal>
 topology: supervisor-workers
 budget:
   max_tokens: 100000
   max_hops: 20
 roles:
   - name: <role-name>
-    responsibility: |
-      <multi-line responsibility prompt>
     subagent_type: <type>
+    model: <sonnet|haiku>
     tools: [<tool>, <tool>]
-    model: sonnet
+    responsibility: |
+      Owns: ...
+      Inputs: ...
+      Outputs: ...
+      Guardrails: ...
+      Success: ...
   - name: ...
 ```
 
-6. **Confirm**: show the YAML path and the run command:
-   ```
-   ✓ Saved ~/.claude/orgs/<name>.yaml
-   Run it with: "run crew <name> on <your task>"
-   ```
+Confirm:
+```
+✓ Saved ~/.claude/orgs/<name>.yaml  (<N> roles, ~<N>K tokens/run)
+Run it with: "run crew <name> on <your task>"
+```
 
 ---
 

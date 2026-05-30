@@ -7,46 +7,52 @@ budget:
 
 roles:
   - name: researcher
-    responsibility: |
-      Research the given topic. Use WebSearch and WebFetch to find 5–10 credible,
-      recent (prefer last 2 years) sources. For each source, capture:
-        - Title + URL
-        - One-sentence summary of what it claims
-        - 2–4 key facts, quotes, or data points worth using
-        - Any caveats, counterarguments, or contradictions across sources
-      Output a structured research brief (~400–600 words) with inline source URLs.
-      Skip filler. Do not write the article itself — that's the writer's job.
     subagent_type: researcher
-    tools: [WebSearch, WebFetch]
     model: sonnet
+    tools: [WebSearch, WebFetch]
+    responsibility: |
+      Owns: A structured research brief on the topic, grounded in credible sources.
+      Inputs: The user's topic (the task). First stage — no prior role output.
+      Outputs: A ~400–600 word brief. For each of 5–10 credible, recent (prefer last
+        2 years) sources, capture: title + URL, a one-sentence claim summary, 2–4 key
+        facts/quotes/data points, and any caveats or contradictions across sources.
+        Inline every source URL.
+      Guardrails: Do NOT write the article — that's the writer's job. Do NOT invent
+        sources, stats, or quotes. Skip filler.
+      Success: The writer can produce a well-sourced post using only this brief; every
+        claim traces to a real URL.
 
   - name: writer
-    responsibility: |
-      Take the researcher's brief and write a 600–900 word blog post on the topic.
-      Audience: technical readers who want substance, not fluff.
-      Tone: clear, opinionated, evidence-based — not corporate, not breathless.
-      Structure: hook → context → 2–3 substantive sections → takeaway.
-      Use the research brief's facts and sources. Cite inline as [Source: <URL>].
-      Do NOT invent statistics, quotes, or claims not in the brief. If something
-      needs a citation that's missing, flag it as [CITATION NEEDED].
-      Return ONLY the post body in markdown. No "Here is the post:" preamble.
     subagent_type: general-purpose
-    tools: []
     model: sonnet
+    tools: []
+    responsibility: |
+      Owns: A first-draft blog post built entirely from the researcher's brief.
+      Inputs: The researcher's brief, plus the original topic.
+      Outputs: A 600–900 word post in markdown. Audience: technical readers who want
+        substance. Tone: clear, opinionated, evidence-based — not corporate, not
+        breathless. Structure: hook → context → 2–3 substantive sections → takeaway.
+        Cite inline as [Source: <URL>] using only URLs from the brief. Return ONLY the
+        post body — no "Here is the post:" preamble.
+      Guardrails: Do NOT invent statistics, quotes, or claims not in the brief. If a
+        claim needs a citation the brief doesn't have, mark it [CITATION NEEDED].
+      Success: A coherent, opinionated draft where every factual claim is backed by a
+        brief-sourced citation or flagged [CITATION NEEDED].
 
   - name: editor
-    responsibility: |
-      You receive (a) the researcher's brief and (b) the writer's draft.
-      Your job is to ship a final polished version:
-        1. Fact-check every concrete claim in the draft against the brief.
-           If a claim isn't supported, either fix it or replace with [CITATION NEEDED].
-        2. Tighten prose: cut filler, kill hedging, sharpen verbs.
-        3. Verify the structure flows: hook → context → sections → takeaway.
-        4. Make sure all source URLs from inline citations are real (from the brief).
-        5. Add a 1-line TL;DR at the top.
-      Return ONLY the final post in markdown, starting with the TL;DR.
-      If the draft has unfixable problems (e.g., majority of claims unsupported),
-      return a short note explaining what's wrong instead of polishing garbage.
     subagent_type: reviewer
-    tools: []
     model: sonnet
+    tools: []
+    responsibility: |
+      Owns: The final, polished, fact-checked post ready to publish.
+      Inputs: The researcher's brief AND the writer's draft.
+      Outputs: The final post in markdown, starting with a 1-line TL;DR. Steps: (1)
+        fact-check every concrete claim against the brief — fix or replace unsupported
+        ones with [CITATION NEEDED]; (2) tighten prose, cut filler, sharpen verbs; (3)
+        verify the hook → context → sections → takeaway flow; (4) confirm all inline
+        source URLs come from the brief. Return ONLY the final post.
+      Guardrails: Do NOT add new claims or sources not in the brief. If the draft is
+        mostly unsupported, return a short note on what's wrong instead of polishing
+        garbage.
+      Success: A clean, tight, fully-sourced post a reader would trust and the user
+        could publish as-is.
